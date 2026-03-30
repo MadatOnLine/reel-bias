@@ -115,6 +115,51 @@ class DataAcquisition:
             na_values=["\\N"],
         )
 
+    def _read_imdb_tsv_chunked(
+        self,
+        gz_path: Path,
+        usecols: list[str] | None = None,
+        filter_fn=None,
+        chunksize: int = 100_000,
+    ) -> pd.DataFrame:
+        """Read a gzip IMDB TSV in chunks, applying an optional filter per chunk.
+
+        This keeps memory usage low by discarding irrelevant rows early.
+
+        Parameters
+        ----------
+        gz_path : Path
+            Path to the .tsv.gz file.
+        usecols : list[str] | None
+            Columns to load (reduces memory). None loads all.
+        filter_fn : callable | None
+            A function ``(chunk: DataFrame) -> DataFrame`` applied to each
+            chunk before accumulation. Use this to drop rows early.
+        chunksize : int
+            Number of rows per chunk (default 100k).
+        """
+        logger.info("Reading %s in chunks (chunksize=%d) …", gz_path, chunksize)
+        chunks: list[pd.DataFrame] = []
+        reader = pd.read_csv(
+            gz_path,
+            sep="\t",
+            compression="gzip",
+            low_memory=False,
+            na_values=["\\N"],
+            usecols=usecols,
+            chunksize=chunksize,
+        )
+        for chunk in reader:
+            if filter_fn is not None:
+                chunk = filter_fn(chunk)
+            if not chunk.empty:
+                chunks.append(chunk)
+        if not chunks:
+            return pd.DataFrame(columns=usecols or [])
+        result = pd.concat(chunks, ignore_index=True)
+        logger.info("  → %d rows after chunked read + filter", len(result))
+        return result
+
     # ------------------------------------------------------------------
     # Public loaders
     # ------------------------------------------------------------------
@@ -122,8 +167,9 @@ class DataAcquisition:
     def load_imdb_basics(self) -> pd.DataFrame:
         """Load IMDB ``title.basics.tsv.gz``.
 
-        Columns: tconst, titleType, primaryTitle, originalTitle, isAdult,
-        startYear, endYear, runtimeMinutes, genres.
+        Uses chunked reading and filters to ``titleType == 'movie'`` during
+        load to avoid OOM on constrained environments (e.g. Colab 12 GB).
+        All columns are preserved.
         """
         filename = "title.basics.tsv.gz"
         url = IMDB_BASE_URL + filename
@@ -131,12 +177,19 @@ class DataAcquisition:
         if path is None:
             logger.warning("IMDB basics unavailable – returning empty DataFrame")
             return pd.DataFrame()
-        return self._read_imdb_tsv(path)
 
-    def load_imdb_principals(self) -> pd.DataFrame:
+        def _filter_movies(chunk: pd.DataFrame) -> pd.DataFrame:
+            return chunk[chunk["titleType"] == "movie"]
+
+        return self._read_imdb_tsv_chunked(path, filter_fn=_filter_movies)
+
+    def load_imdb_principals(self, valid_tconsts: set[str] | None = None) -> pd.DataFrame:
         """Load IMDB ``title.principals.tsv.gz``.
 
-        Columns: tconst, ordering, nconst, category, job, characters.
+        Uses chunked reading. If *valid_tconsts* is provided, only rows
+        whose ``tconst`` is in the set are kept — this is critical for
+        memory since the full file has ~60 M rows.
+        All columns are preserved.
         """
         filename = "title.principals.tsv.gz"
         url = IMDB_BASE_URL + filename
@@ -144,13 +197,24 @@ class DataAcquisition:
         if path is None:
             logger.warning("IMDB principals unavailable – returning empty DataFrame")
             return pd.DataFrame()
-        return self._read_imdb_tsv(path)
 
-    def load_imdb_names(self) -> pd.DataFrame:
+        if valid_tconsts:
+            def _filter_tconsts(chunk: pd.DataFrame) -> pd.DataFrame:
+                filtered = chunk[chunk["tconst"].isin(valid_tconsts)]
+                if "category" in filtered.columns:
+                    filtered = filtered[
+                        filtered["category"].isin({"actor", "actress", "director"})
+                    ]
+                return filtered
+            return self._read_imdb_tsv_chunked(path, filter_fn=_filter_tconsts)
+        else:
+            return self._read_imdb_tsv_chunked(path)
+
+    def load_imdb_names(self, valid_nconsts: set[str] | None = None) -> pd.DataFrame:
         """Load IMDB ``name.basics.tsv.gz``.
 
-        Columns: nconst, primaryName, birthYear, deathYear,
-        primaryProfession, knownForTitles.
+        Uses chunked reading. If *valid_nconsts* is provided, only matching
+        rows are kept. All columns are preserved.
         """
         filename = "name.basics.tsv.gz"
         url = IMDB_BASE_URL + filename
@@ -158,7 +222,13 @@ class DataAcquisition:
         if path is None:
             logger.warning("IMDB names unavailable – returning empty DataFrame")
             return pd.DataFrame()
-        return self._read_imdb_tsv(path)
+
+        if valid_nconsts:
+            def _filter_nconsts(chunk: pd.DataFrame) -> pd.DataFrame:
+                return chunk[chunk["nconst"].isin(valid_nconsts)]
+            return self._read_imdb_tsv_chunked(path, filter_fn=_filter_nconsts)
+        else:
+            return self._read_imdb_tsv_chunked(path)
 
     def load_mendeley_dataset(self) -> pd.DataFrame:
         """Load the Mendeley Indian movies dataset.
