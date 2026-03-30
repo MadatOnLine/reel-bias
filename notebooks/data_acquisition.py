@@ -273,8 +273,11 @@ class DataAcquisition:
 
         df = self._read_imdb_tsv_chunked(path, filter_fn=_filter_movies)
 
-        # Cache processed result
+        # Coerce mixed-type numeric columns before parquet save
         if not df.empty:
+            for col in ("startYear", "endYear", "runtimeMinutes", "isAdult"):
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
             df.to_parquet(parquet, index=False)
             logger.info("Cached IMDB basics (movies) to %s", parquet)
 
@@ -319,8 +322,10 @@ class DataAcquisition:
         else:
             df = self._read_imdb_tsv_chunked(path)
 
-        # Cache processed result
+        # Coerce mixed-type columns before parquet save
         if not df.empty:
+            if "ordering" in df.columns:
+                df["ordering"] = pd.to_numeric(df["ordering"], errors="coerce")
             df.to_parquet(parquet, index=False)
             logger.info("Cached IMDB principals to %s", parquet)
 
@@ -359,8 +364,11 @@ class DataAcquisition:
         else:
             df = self._read_imdb_tsv_chunked(path)
 
-        # Cache processed result
+        # Coerce mixed-type columns before parquet save
         if not df.empty:
+            for col in ("birthYear", "deathYear"):
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
             df.to_parquet(parquet, index=False)
             logger.info("Cached IMDB names to %s", parquet)
 
