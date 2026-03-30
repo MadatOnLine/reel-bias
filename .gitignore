@@ -1,0 +1,29 @@
+# Kiro artifacts
+.kiro/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data cache (large files)
+data/*.tsv.gz
+data/*.parquet
+data/*.csv
+data/*.png
+!data/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# pytest
+.pytest_cache/
+
+# Hypothesis cache
+.hypothesis/
