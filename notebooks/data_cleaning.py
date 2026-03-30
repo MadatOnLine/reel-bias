@@ -342,8 +342,8 @@ class DataCleaner:
                 "rating": ["Rating", "rating", "IMDb Rating", "imdb_rating"],
             },
             "github_bollywood": {
-                "tconst": ["tconst", "imdb_id"],
-                "title": ["Title", "title", "Movie", "movie", "Name", "name"],
+                "tconst": ["tconst", "imdb_id", "Movie ID"],
+                "title": ["Name", "name", "Title", "title", "Movie", "movie"],
                 "year": ["Year", "year", "Release Year", "release_year"],
                 "genres": ["Genre", "genre", "Genres", "genres"],
                 "rating": ["Rating", "rating", "IMDb Rating", "imdb_rating"],

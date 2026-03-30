@@ -32,12 +32,14 @@ IMDB_FILES = {
 }
 
 MENDELEY_DATASET_URL = (
-    "https://data.mendeley.com/datasets/wcb4bxbyxx/2"
+    "https://raw.githubusercontent.com/"
+    "pncnmnp/indian-movies-database/master/data/movies.csv"
 )
 
-GITHUB_BOLLYWOOD_RAW_BASE = (
+GITHUB_BOLLYWOOD_CSV_URL = (
     "https://raw.githubusercontent.com/"
     "devensinghbhagtani/Bollywood-Movie-Dataset/main/"
+    "IMDB-Movie-Dataset(2023-1951).csv"
 )
 
 KAGGLE_DATASET_HANDLE = "nareshbhat/indian-moviesimdb"
@@ -231,52 +233,46 @@ class DataAcquisition:
             return self._read_imdb_tsv_chunked(path)
 
     def load_mendeley_dataset(self) -> pd.DataFrame:
-        """Load the Mendeley Indian movies dataset.
+        """Load the Indian movies database (pncnmnp/indian-movies-database).
 
-        Attempts to download the CSV from the Mendeley data repository.
-        Falls back to any ``*mendeley*.csv`` already present in the cache dir.
+        Originally sourced from Mendeley; now hosted on GitHub with a
+        direct-download CSV.  Falls back to any ``*mendeley*.csv`` or
+        ``*indian_movies*.csv`` already present in the cache dir.
         """
         filename = "mendeley_indian_movies.csv"
         local = self.data_dir / filename
 
         if local.exists() and local.stat().st_size > 0:
-            logger.info("Using cached Mendeley file: %s", local)
+            logger.info("Using cached Indian movies file: %s", local)
             return pd.read_csv(local)
 
-        # Mendeley data API – try the direct download endpoint
-        download_url = (
-            "https://data.mendeley.com/public-files/datasets/"
-            "wcb4bxbyxx/files/"
-            "IMDb-Indian-Movies.csv"
-        )
         try:
-            logger.info("Attempting Mendeley download …")
+            logger.info("Downloading Indian movies database …")
             resp = requests.get(
-                download_url, timeout=DOWNLOAD_TIMEOUT, allow_redirects=True
+                MENDELEY_DATASET_URL, timeout=DOWNLOAD_TIMEOUT, allow_redirects=True
             )
             resp.raise_for_status()
             local.write_bytes(resp.content)
-            logger.info("Saved Mendeley dataset to %s", local)
+            logger.info("Saved Indian movies dataset to %s", local)
             return pd.read_csv(local)
         except (requests.RequestException, OSError) as exc:
-            logger.warning("Mendeley download failed: %s", exc)
+            logger.warning("Indian movies database download failed: %s", exc)
 
-        # Fallback: look for any CSV with 'mendeley' in the name
-        for p in self.data_dir.glob("*mendeley*.csv"):
-            logger.info("Falling back to local file: %s", p)
-            return pd.read_csv(p)
+        # Fallback: look for any matching CSV in the cache
+        for pattern in ("*mendeley*.csv", "*indian_movies*.csv"):
+            for p in self.data_dir.glob(pattern):
+                logger.info("Falling back to local file: %s", p)
+                return pd.read_csv(p)
 
-        logger.warning("Mendeley dataset unavailable – returning empty DataFrame")
+        logger.warning("Indian movies dataset unavailable – returning empty DataFrame")
         return pd.DataFrame()
 
     def load_github_bollywood(self) -> pd.DataFrame:
         """Load the Bollywood Movie Dataset from GitHub.
 
-        Tries the raw CSV URL from the repository's main branch.
+        The CSV is ``IMDB-Movie-Dataset(2023-1951).csv`` in the repo root.
         """
         filename = "bollywood_movies.csv"
-        # The repo stores the data in a CSV at the root
-        csv_url = GITHUB_BOLLYWOOD_RAW_BASE + "Bollywood_Movie_Dataset.csv"
         local = self.data_dir / filename
 
         if local.exists() and local.stat().st_size > 0:
@@ -285,7 +281,7 @@ class DataAcquisition:
 
         try:
             logger.info("Downloading GitHub Bollywood dataset …")
-            resp = requests.get(csv_url, timeout=DOWNLOAD_TIMEOUT)
+            resp = requests.get(GITHUB_BOLLYWOOD_CSV_URL, timeout=DOWNLOAD_TIMEOUT)
             resp.raise_for_status()
             local.write_bytes(resp.content)
             logger.info("Saved GitHub Bollywood dataset to %s", local)
